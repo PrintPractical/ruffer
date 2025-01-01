@@ -1,0 +1,12 @@
+[package]
+name = "ruffer"
+description = "A simple overwriting ring buffer library written in Rust."
+version = "1.0.0"
+edition = "2021"
+license = "Apache-2.0"
+authors = ["Chris Buchter"]
+
+[features]
+sync = []
+
+[dependencies]
