@@ -7,6 +7,47 @@
 //! 
 //! # Features
 //! - `sync` - A Sync implementation of the RingBuffer.
+//! 
+//! # Usage
+//! ## Create a new RingBuffer with a specific capacity
+//! ```rust
+//! use ruffer::RingBuffer;
+//! 
+//! let buffer = RingBuffer::with_capacity(1024);
+//! ```
+//! ## Write data to the buffer
+//! ```rust
+//! use ruffer::RingBuffer;
+//! use std::io::Write;
+//! 
+//! let mut buffer = RingBuffer::with_capacity(1024);
+//! let write_data = "Test data buffer".as_bytes();
+//! match buffer.write(&write_data) {
+//!   Ok(bytes) => {
+//!     println!("wrote {} bytes to buffer", bytes);
+//!   }
+//!   Err(e) => {
+//!     println!("{}", e);
+//!   }
+//! }
+//! ```
+//! ## Read data from the buffer
+//! ```rust
+//! use ruffer::RingBuffer;
+//! use std::io::Read;
+//! 
+//! let mut buffer = RingBuffer::with_capacity(1024);
+//! // ... use ringbuffer ...
+//! let read_data = &mut [0u8; 32];
+//! match buffer.read(read_data) {
+//!   Ok(bytes) => {
+//!     println!("read {} bytes from buffer", bytes);
+//!   }
+//!   Err(e) => {
+//!     println!("{}", e);
+//!   }
+//! }
+//! ```
 
 #[cfg(feature = "sync")]
 pub mod sync;
@@ -23,10 +64,21 @@ pub struct RingBuffer {
 
 // Static Impls
 impl RingBuffer {
+    /// Create a new RingBuffer with the default capacity
+    /// 
+    /// # Returns
+    /// An empty RingBuffer instance with the default capacity
     pub fn new() -> Self {
         RingBuffer::with_capacity(DEFAULT_CAPACITY)
     }
 
+    /// Create a new RingBuffer with a specified capacity
+    /// 
+    /// # Parameters
+    /// - **size** - capacity in bytes
+    /// 
+    /// # Returns
+    /// An empty RingBuffer instance with the default capacity
     pub fn with_capacity(size: usize) -> Self {
         RingBuffer {
             buffer: vec![0u8; size],
@@ -40,18 +92,35 @@ impl RingBuffer {
 
 // Member Impls
 impl RingBuffer {
+    /// Acquire the capacity of the RingBuffer
+    /// 
+    /// # Returns
+    /// The capacity of the RingBuffer in bytes
     pub fn capacity(&self) -> usize {
         self.capacity
     }
 
+    /// Query if RingBuffer is empty
+    /// 
+    /// # Returns
+    /// **true** if empty, **false** if not
     pub fn empty(&self) -> bool {
         self.len == 0
     }
 
+    /// Acquire the length of the RingBuffer
+    /// 
+    /// # Returns
+    /// The length of the RingBuffer
     pub fn len(&self) -> usize {
         self.len
     }
 
+    /// Acquire a copy of the RingBuffer data in a Vector
+    /// This allocates a new vector of size **self.len()** and puts the contents of the RingBuffer in the vector
+    /// 
+    /// # Returns
+    /// The contents of the RingBuffer in a newly allocated Vec
     pub fn to_vec(&self) -> Vec<u8> {
         let mut ret = vec![0u8; self.len];
         let slice = ret.as_mut_slice();
@@ -61,6 +130,14 @@ impl RingBuffer {
         ret
     }
 
+    /// Pop bytes from the RingBuffer
+    /// This function doesn't actually remove any data, just moves the head index and adjusts the data length essentially removing the data
+    /// 
+    /// # Parameters
+    /// - **num** - number of bytes to pop
+    /// 
+    /// # Returns
+    /// The capacity of the RingBuffer
     pub fn pop_bytes(&mut self, num: usize) -> usize {
         let actual_num = std::cmp::min(self.len, num);
         self.len -= actual_num;
@@ -68,6 +145,14 @@ impl RingBuffer {
         actual_num
     }
 
+    /// Resize the RingBuffer
+    /// This function internally uses the to_vec function to simplify the logic, meaning there is a new allocation of the internal buffer
+    /// 
+    /// # Parameter
+    /// - **new_size** - the new capacity of the RingBuffer
+    /// 
+    /// # Returns
+    /// The capacity of the RingBuffer
     pub fn resize(&mut self, new_size: usize) {
         if self.capacity != new_size {
             if self.len > new_size {
