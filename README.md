@@ -1,4 +1,4 @@
-# ruffer 1.0.1
+# ruffer 1.0.2
 R[ing B]uffer is a simple overwriting ring buffer implementation.
 A RingBuffer allocates it's memory once at creation on the heap.
 The RingBuffer implements std::io::Read and std::io::Write for interacting with the buffer.
