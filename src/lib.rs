@@ -48,6 +48,14 @@
 //!   }
 //! }
 //! ```
+//! 
+//! # Release Notes
+//! ## v1.0.3
+//! - Added the ability to turn overwriting off. This may be helpful for Producer/Consumer type use cases.
+//! ## v1.0.2 and Previous
+//! - These were the initial commits of Ruffer. I messed up some stuff around the docs etc, so my bad...
+
+use core::num;
 
 #[cfg(feature = "sync")]
 pub mod sync;
@@ -60,6 +68,7 @@ pub struct RingBuffer {
     len: usize,
     head: usize,
     tail: usize,
+    overwrite: bool,
 }
 
 // Static Impls
@@ -86,6 +95,7 @@ impl RingBuffer {
             len: 0,
             head: 0,
             tail: 0,
+            overwrite: true,
         }
     }
 }
@@ -114,6 +124,22 @@ impl RingBuffer {
     /// The length of the RingBuffer
     pub fn len(&self) -> usize {
         self.len
+    }
+
+    /// Acquire the overwrite mode state
+    /// 
+    /// # Returns
+    /// True if Ring Buffer is in overwrite mode (default), False if not.
+    pub fn overwrite(&self) -> bool {
+        self.overwrite
+    }
+
+    /// Set the overwrite mode
+    /// 
+    /// # Parameters
+    /// - **val** - overwrite value
+    pub fn set_overwrite(&mut self, val: bool) {
+        self.overwrite = val;
     }
 
     /// Acquire a copy of the RingBuffer data in a Vector
@@ -170,7 +196,14 @@ impl RingBuffer {
 impl std::io::Write for RingBuffer {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         let buffer = self.buffer.as_mut_slice();
-        for i in 0..buf.len() {
+        if self.overwrite == false && self.len == self.capacity {
+            return Err(std::io::ErrorKind::WouldBlock.into());
+        }
+        let num_bytes = match self.overwrite {
+            true => buf.len(),
+            false => std::cmp::min(self.capacity - self.len, buf.len()),
+        };
+        for i in 0..num_bytes {
             buffer[self.head] = buf[i];
             if self.head == self.tail && self.len > 0 {
                 self.tail = (self.tail + 1) % self.capacity;
@@ -179,7 +212,7 @@ impl std::io::Write for RingBuffer {
             }
             self.head = (self.head + 1) % self.capacity;
         }
-        Ok(buf.len())
+        Ok(num_bytes)
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
@@ -384,5 +417,22 @@ mod tests {
         assert!(res.is_ok());
         assert_eq!(res.unwrap(), 11);
         assert_eq!(&read_data[0..11], &write_data[0..11]);
+    }
+
+    #[test]
+    fn disable_overwrite() {
+        let mut ruffer = RingBuffer::with_capacity(16);
+        let write_data = "thisisatest".as_bytes();
+        ruffer.set_overwrite(false);
+        assert!(ruffer.overwrite() == false);
+        let res = ruffer.write(write_data);
+        assert!(res.is_ok());
+        assert_eq!(res.unwrap(), write_data.len());
+        let res = ruffer.write(write_data);
+        assert!(res.is_ok());
+        assert_eq!(res.unwrap(), 5);
+        let res = ruffer.write(write_data);
+        assert!(res.is_err());
+        assert_eq!(res.unwrap_err().kind(), std::io::ErrorKind::WouldBlock);
     }
 }
