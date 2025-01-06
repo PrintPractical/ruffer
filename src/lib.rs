@@ -4,22 +4,22 @@
 //! Any size buffer can be written to the RingBuffer, just note that only the capacity of the RingBuffer will be retained.
 //! Reading data from the buffer will move the tail index, so the read data is essentially dropped.
 //! If one wants to get a copy of the data on the form of a vector, a helper function are available to easily acquire one.
-//! 
+//!
 //! # Features
 //! - `sync` - A Sync implementation of the RingBuffer.
-//! 
+//!
 //! # Usage
 //! ## Create a new RingBuffer with a specific capacity
 //! ```rust
 //! use ruffer::RingBuffer;
-//! 
+//!
 //! let buffer = RingBuffer::with_capacity(1024);
 //! ```
 //! ## Write data to the buffer
 //! ```rust
 //! use ruffer::RingBuffer;
 //! use std::io::Write;
-//! 
+//!
 //! let mut buffer = RingBuffer::with_capacity(1024);
 //! let write_data = "Test data buffer".as_bytes();
 //! match buffer.write(&write_data) {
@@ -35,7 +35,7 @@
 //! ```rust
 //! use ruffer::RingBuffer;
 //! use std::io::Read;
-//! 
+//!
 //! let mut buffer = RingBuffer::with_capacity(1024);
 //! // ... use ringbuffer ...
 //! let read_data = &mut [0u8; 32];
@@ -48,6 +48,12 @@
 //!   }
 //! }
 //! ```
+//!
+//! # Release Notes
+//! ## v1.0.3
+//! - Added the ability to turn overwriting off. This may be helpful for Producer/Consumer type use cases.
+//! ## v1.0.2 and Previous
+//! - These were the initial commits of Ruffer. I messed up some stuff around the docs etc, so my bad...
 
 #[cfg(feature = "sync")]
 pub mod sync;
@@ -60,12 +66,13 @@ pub struct RingBuffer {
     len: usize,
     head: usize,
     tail: usize,
+    overwrite: bool,
 }
 
 // Static Impls
 impl RingBuffer {
     /// Create a new RingBuffer with the default capacity
-    /// 
+    ///
     /// # Returns
     /// An empty RingBuffer instance with the default capacity
     pub fn new() -> Self {
@@ -73,10 +80,10 @@ impl RingBuffer {
     }
 
     /// Create a new RingBuffer with a specified capacity
-    /// 
+    ///
     /// # Parameters
     /// - **size** - capacity in bytes
-    /// 
+    ///
     /// # Returns
     /// An empty RingBuffer instance with the default capacity
     pub fn with_capacity(size: usize) -> Self {
@@ -86,6 +93,7 @@ impl RingBuffer {
             len: 0,
             head: 0,
             tail: 0,
+            overwrite: true,
         }
     }
 }
@@ -93,7 +101,7 @@ impl RingBuffer {
 // Member Impls
 impl RingBuffer {
     /// Acquire the capacity of the RingBuffer
-    /// 
+    ///
     /// # Returns
     /// The capacity of the RingBuffer in bytes
     pub fn capacity(&self) -> usize {
@@ -101,7 +109,7 @@ impl RingBuffer {
     }
 
     /// Query if RingBuffer is empty
-    /// 
+    ///
     /// # Returns
     /// **true** if empty, **false** if not
     pub fn empty(&self) -> bool {
@@ -109,16 +117,32 @@ impl RingBuffer {
     }
 
     /// Acquire the length of the RingBuffer
-    /// 
+    ///
     /// # Returns
     /// The length of the RingBuffer
     pub fn len(&self) -> usize {
         self.len
     }
 
+    /// Acquire the overwrite mode state
+    ///
+    /// # Returns
+    /// True if Ring Buffer is in overwrite mode (default), False if not.
+    pub fn overwrite(&self) -> bool {
+        self.overwrite
+    }
+
+    /// Set the overwrite mode
+    ///
+    /// # Parameters
+    /// - **val** - overwrite value
+    pub fn set_overwrite(&mut self, val: bool) {
+        self.overwrite = val;
+    }
+
     /// Acquire a copy of the RingBuffer data in a Vector
     /// This allocates a new vector of size **self.len()** and puts the contents of the RingBuffer in the vector
-    /// 
+    ///
     /// # Returns
     /// The contents of the RingBuffer in a newly allocated Vec
     pub fn to_vec(&self) -> Vec<u8> {
@@ -132,10 +156,10 @@ impl RingBuffer {
 
     /// Pop bytes from the RingBuffer
     /// This function doesn't actually remove any data, just moves the head index and adjusts the data length essentially removing the data
-    /// 
+    ///
     /// # Parameters
     /// - **num** - number of bytes to pop
-    /// 
+    ///
     /// # Returns
     /// The capacity of the RingBuffer
     pub fn pop_bytes(&mut self, num: usize) -> usize {
@@ -147,10 +171,10 @@ impl RingBuffer {
 
     /// Resize the RingBuffer
     /// This function internally uses the to_vec function to simplify the logic, meaning there is a new allocation of the internal buffer
-    /// 
+    ///
     /// # Parameter
     /// - **new_size** - the new capacity of the RingBuffer
-    /// 
+    ///
     /// # Returns
     /// The capacity of the RingBuffer
     pub fn resize(&mut self, new_size: usize) {
@@ -170,7 +194,14 @@ impl RingBuffer {
 impl std::io::Write for RingBuffer {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         let buffer = self.buffer.as_mut_slice();
-        for i in 0..buf.len() {
+        if !self.overwrite && self.len == self.capacity {
+            return Err(std::io::ErrorKind::WouldBlock.into());
+        }
+        let num_bytes = match self.overwrite {
+            true => buf.len(),
+            false => std::cmp::min(self.capacity - self.len, buf.len()),
+        };
+        for i in 0..num_bytes {
             buffer[self.head] = buf[i];
             if self.head == self.tail && self.len > 0 {
                 self.tail = (self.tail + 1) % self.capacity;
@@ -179,7 +210,7 @@ impl std::io::Write for RingBuffer {
             }
             self.head = (self.head + 1) % self.capacity;
         }
-        Ok(buf.len())
+        Ok(num_bytes)
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
@@ -384,5 +415,22 @@ mod tests {
         assert!(res.is_ok());
         assert_eq!(res.unwrap(), 11);
         assert_eq!(&read_data[0..11], &write_data[0..11]);
+    }
+
+    #[test]
+    fn disable_overwrite() {
+        let mut ruffer = RingBuffer::with_capacity(16);
+        let write_data = "thisisatest".as_bytes();
+        ruffer.set_overwrite(false);
+        assert!(!ruffer.overwrite());
+        let res = ruffer.write(write_data);
+        assert!(res.is_ok());
+        assert_eq!(res.unwrap(), write_data.len());
+        let res = ruffer.write(write_data);
+        assert!(res.is_ok());
+        assert_eq!(res.unwrap(), 5);
+        let res = ruffer.write(write_data);
+        assert!(res.is_err());
+        assert_eq!(res.unwrap_err().kind(), std::io::ErrorKind::WouldBlock);
     }
 }
