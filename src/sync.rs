@@ -1,4 +1,4 @@
-//! A Sync implementation of the RingBuffer. 
+//! A Sync implementation of the RingBuffer.
 //! This is just a helper struct which has a similar API and wraps the RingBuffer in a Mutex.
 //! Utilize an std::sync::Arc to make a RingBuffer which is Send + Sync.
 

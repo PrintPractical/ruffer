@@ -1,4 +1,4 @@
-# ruffer 1.0.2
+# ruffer 1.0.3
 R[ing B]uffer is a simple overwriting ring buffer implementation.
 A RingBuffer allocates it's memory once at creation on the heap.
 The RingBuffer implements std::io::Read and std::io::Write for interacting with the buffer.
@@ -49,6 +49,12 @@ match buffer.read(read_data) {
   }
 }
 ```
+
+## Release Notes
+### v1.0.3
+- Added the ability to turn overwriting off. This may be helpful for Producer/Consumer type use cases.
+### v1.0.2 and Previous
+- These were the initial commits of Ruffer. I messed up some stuff around the docs etc, so my bad...
 
 ## License
 [Apache-2.0](https://github.com/PrintPractical/ruffer/blob/main/LICENSE)
